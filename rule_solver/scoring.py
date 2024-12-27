@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Union
+from typing import Dict, Union, Tuple, Literal
 
 def fast_ranks(x):
     """Simple ranking function using numpy only"""
@@ -124,6 +124,101 @@ def calculate_rank_score(df, rule, target_column='species'):
         'matching_samples': len(matching_df),
         'dominant_class': dominant_class,
         'feature_scores': feature_scores
+    }
+
+def calculate_directional_score(df, rule, target_var, direction: Union[Literal['maximize'],
+                                                                     Literal['minimize'], str]) \
+                                                                     -> Dict[str, Union[float, int, str, None]]:
+    """
+    Calculate score based on how well the rule drives a target variable in desired direction.
+
+    Args:
+        df: DataFrame with all data
+        rule: Dictionary of feature conditions
+        target_var: Variable to optimize
+        direction: Either 'maximize'/'minimize' for continuous variables,
+                  or specific category for categorical variables
+    """
+    def matches_rule(row, rule):
+        if target_var in rule:  # Remove target from rule conditions
+            return False
+        for feature, value in rule.items():
+            if isinstance(value, tuple):
+                min_val, max_val = value
+                if not (min_val <= row[feature] <= max_val):
+                    return False
+            else:
+                if row[feature] != value:
+                    return False
+        return True
+
+    # Get matching samples
+    matching_mask = df.apply(lambda row: matches_rule(row, rule), axis=1)
+
+    if matching_mask.sum() == 0:
+        return {
+            'score': 0.0,
+            'direction_score': 0.0,
+            'coverage': 0.0,
+            'matching_samples': 0,
+        }
+
+    matching_df = df[matching_mask]
+    non_matching_df = df[~matching_mask]
+
+    # Calculate directional score based on variable type
+    if direction in ['maximize', 'minimize']:
+        # For continuous variables
+        matching_vals = matching_df[target_var].values
+        non_matching_vals = non_matching_df[target_var].values
+
+        # Get medians for comparison
+        matching_median = np.median(matching_vals)
+        non_matching_median = np.median(non_matching_vals)
+
+        # Calculate how well the rule separates values in desired direction
+        if direction == 'maximize':
+            direction_score = (matching_median - non_matching_median) / non_matching_median
+        else:  # minimize
+            direction_score = (non_matching_median - matching_median) / non_matching_median
+
+        # Calculate spread within matching samples
+        matching_iqr = np.percentile(matching_vals, 75) - np.percentile(matching_vals, 25)
+        total_iqr = np.percentile(df[target_var], 75) - np.percentile(df[target_var], 25)
+        spread_score = 1 - (matching_iqr / total_iqr if total_iqr > 0 else 1)
+
+    else:
+        # For categorical variables (direction is desired category)
+        matching_counts = matching_df[target_var].value_counts(normalize=True)
+        non_matching_counts = non_matching_df[target_var].value_counts(normalize=True)
+
+        # Calculate how much more prevalent the desired category is in matching samples
+        matching_rate = matching_counts.get(direction, 0)
+        non_matching_rate = non_matching_counts.get(direction, 0)
+
+        direction_score = matching_rate - non_matching_rate
+        spread_score = matching_rate  # For categorical, spread is just purity
+
+    # Calculate coverage with penalty for very small rules
+    min_samples = max(10, len(df) * 0.05)  # At least 10 samples or 5% of data
+    coverage = matching_mask.sum() / len(df)
+    coverage_score = coverage if matching_mask.sum() >= min_samples else coverage * 0.5
+
+    # Combine scores
+    final_score = (direction_score * 0.6 + spread_score * 0.4) * np.sqrt(coverage_score)
+
+    return {
+        'score': final_score,
+        'direction_score': direction_score,
+        'spread_score': spread_score,
+        'coverage': coverage,
+        'matching_samples': matching_mask.sum(),
+        'target_stats': {
+            'matching_median': np.median(matching_df[target_var]) if direction in ['maximize', 'minimize'] else None,
+            'non_matching_median': np.median(non_matching_df[target_var]) if direction in ['maximize', 'minimize'] else None,
+            'matching_rate': matching_rate if direction not in ['maximize', 'minimize'] else None,
+            'non_matching_rate': non_matching_rate if direction not in ['maximize', 'minimize'] else None
+        }
     }
 
 def score_improvement(new_score, base_score, new_coverage, base_coverage,

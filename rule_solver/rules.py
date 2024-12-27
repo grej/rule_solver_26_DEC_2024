@@ -1,7 +1,105 @@
 # rules.py
 import numpy as np
-from .utils import infer_feature_types, matches_rule
-from .scoring import calculate_rank_score, score_improvement, fast_ranks
+from typing import Dict, Union, List, Tuple
+from .utils import infer_feature_types
+
+def fast_ranks(x):
+    """Simple ranking function using numpy only"""
+    temp = x.argsort()
+    ranks = np.empty_like(temp)
+    ranks[temp] = np.arange(len(x))
+    return (ranks + 1) / (len(x) + 1)  # Add 1 to avoid 0s
+
+def calculate_directional_score(df, rule, target_var, direction) -> Dict[str, Union[float, int, str, None]]:
+    """
+    Calculate score based on how well the rule drives a target variable in desired direction.
+    """
+    def matches_rule(row, rule):
+        if target_var in rule:  # Remove target from rule conditions
+            return False
+        for feature, value in rule.items():
+            if isinstance(value, tuple):
+                min_val, max_val = value
+                if not (min_val <= row[feature] <= max_val):
+                    return False
+            else:
+                if row[feature] != value:
+                    return False
+        return True
+
+    # Get matching samples
+    matching_mask = df.apply(lambda row: matches_rule(row, rule), axis=1)
+
+    if matching_mask.sum() == 0:
+        return {
+            'score': 0.0,
+            'direction_score': 0.0,
+            'coverage': 0.0,
+            'matching_samples': 0,
+        }
+
+    matching_df = df[matching_mask]
+    non_matching_df = df[~matching_mask]
+
+    # Calculate directional score based on variable type
+    if direction in ['maximize', 'minimize']:
+        # For continuous variables
+        matching_vals = matching_df[target_var].values
+        non_matching_vals = non_matching_df[target_var].values
+
+        # Get medians for comparison
+        matching_median = np.median(matching_vals)
+        non_matching_median = np.median(non_matching_vals)
+
+        # Calculate how well the rule separates values in desired direction
+        if direction == 'maximize':
+            direction_score = (matching_median - non_matching_median) / non_matching_median
+        else:  # minimize
+            direction_score = (non_matching_median - matching_median) / non_matching_median
+
+        # Calculate spread within matching samples
+        matching_iqr = np.percentile(matching_vals, 75) - np.percentile(matching_vals, 25)
+        total_iqr = np.percentile(df[target_var], 75) - np.percentile(df[target_var], 25)
+        spread_score = 1 - (matching_iqr / total_iqr if total_iqr > 0 else 1)
+
+    else:
+        # For categorical variables (direction is desired category)
+        matching_counts = matching_df[target_var].value_counts(normalize=True)
+        non_matching_counts = non_matching_df[target_var].value_counts(normalize=True)
+
+        # Calculate how much more prevalent the desired category is in matching samples
+        matching_rate = matching_counts.get(direction, 0)
+        non_matching_rate = non_matching_counts.get(direction, 0)
+
+        direction_score = matching_rate - non_matching_rate
+        spread_score = matching_rate  # For categorical, spread is just purity
+
+    # Calculate coverage with penalty for very small rules
+    min_samples = max(10, len(df) * 0.05)  # At least 10 samples or 5% of data
+    coverage = matching_mask.sum() / len(df)
+    coverage_score = coverage if matching_mask.sum() >= min_samples else coverage * 0.5
+
+    # Combine scores
+    final_score = (direction_score * 0.6 + spread_score * 0.4) * np.sqrt(coverage_score)
+
+    return {
+        'score': final_score,
+        'direction_score': direction_score,
+        'spread_score': spread_score,
+        'coverage': coverage,
+        'matching_samples': matching_mask.sum(),
+        'target_stats': {
+            'matching_median': np.median(matching_df[target_var]) if direction in ['maximize', 'minimize'] else None,
+            'non_matching_median': np.median(non_matching_df[target_var]) if direction in ['maximize', 'minimize'] else None,
+            'matching_rate': matching_rate if direction not in ['maximize', 'minimize'] else None,
+            'non_matching_rate': non_matching_rate if direction not in ['maximize', 'minimize'] else None
+        }
+    }
+
+def score_improvement(new_score, base_score, new_coverage, base_coverage,
+                     coverage_weight=0.1):
+    """Calculate improvement in score with coverage penalty/bonus"""
+    return (new_score - base_score) + coverage_weight * (new_coverage - base_coverage)
 
 def create_rule(point1, point2, continuous_features, categorical_features, df):
     """Create rule with adaptive boundary expansion"""
@@ -28,41 +126,38 @@ def create_rule(point1, point2, continuous_features, categorical_features, df):
 
     return rule
 
-def generate_rules(df, num_rules=100, target_column='species', min_coverage=0.1):
-    """Generate initial rules using smart sampling and density-based expansion"""
+def generate_rules(df, num_rules=100, target_var=None):
+    """Generate initial rules using percentile ranges and density-based sampling"""
     continuous_features, categorical_features = infer_feature_types(df)
-    if target_column in continuous_features:
-        continuous_features.remove(target_column)
+    if target_var in continuous_features:
+        continuous_features.remove(target_var)
+    if target_var in categorical_features:
+        categorical_features.remove(target_var)
 
     rules = []
 
-    # Strategy 1: Use percentile-based ranges for each class
-    classes = df[target_column].unique()
+    # Strategy 1: Generate rules using percentile ranges for features
+    percentile_pairs = [(20, 80), (10, 90), (30, 70)]
 
-    for target_class in classes:
-        class_df = df[df[target_column] == target_class]
+    for lower_pct, upper_pct in percentile_pairs:
+        # Create multiple rules with different feature combinations
+        feature_combinations = [(1,), (2,)]  # Try rules with 1 or 2 features
 
-        # Create rules using different percentile ranges
-        percentile_pairs = [(20, 80), (10, 90), (30, 70)]
+        for n_features in feature_combinations:
+            # Randomly select n features
+            selected_features = np.random.choice(
+                continuous_features,
+                size=min(len(n_features), len(continuous_features)),
+                replace=False
+            )
 
-        for lower_pct, upper_pct in percentile_pairs:
             rule = {}
-
-            # Create ranges using percentiles for continuous features
-            for feature in continuous_features:
-                values = class_df[feature].values
+            for feature in selected_features:
+                values = df[feature].values
                 lower = np.percentile(values, lower_pct)
                 upper = np.percentile(values, upper_pct)
                 if lower != upper:
                     rule[feature] = (lower, upper)
-
-            # Add any categorical features that strongly correlate with class
-            for feature in categorical_features:
-                if feature != target_column:
-                    mode_val = class_df[feature].mode().iloc[0]
-                    mode_ratio = (class_df[feature] == mode_val).mean()
-                    if mode_ratio > 0.8:  # Only add if strongly predictive
-                        rule[feature] = mode_val
 
             if rule:  # Only add if we found some defining features
                 rules.append(rule)
@@ -96,12 +191,12 @@ def generate_rules(df, num_rules=100, target_column='species', min_coverage=0.1)
 
     return rules
 
-def prune_rule(df, rule, target_column='species', min_improvement=0.05, min_features=2):
-    """Prune conditions using rank-based scoring"""
-    base_metrics = calculate_rank_score(df, rule, target_column)
+def prune_rule(df, rule, target_var, direction, min_improvement=0.05, min_features=2):
+    """Prune conditions using directional scoring"""
+    base_metrics = calculate_directional_score(df, rule, target_var, direction)
 
     if base_metrics is None:
-        raise ValueError("Base metrics cannot be None. Ensure calculate_rank_score always returns a valid dictionary.")
+        raise ValueError("Base metrics cannot be None. Ensure scoring always returns a valid dictionary.")
 
     current_rule = rule.copy()
     pruning_history = []
@@ -112,16 +207,16 @@ def prune_rule(df, rule, target_column='species', min_improvement=0.05, min_feat
         best_new_metrics = None
 
         for feature in list(current_rule.keys()):
-            if feature == target_column:
+            if feature == target_var:
                 continue
 
             # Ensure we keep minimum number of features
-            remaining_features = len([f for f in current_rule if f != target_column])
+            remaining_features = len([f for f in current_rule if f != target_var])
             if remaining_features < min_features:
                 continue
 
             test_rule = {k: v for k, v in current_rule.items() if k != feature}
-            test_metrics = calculate_rank_score(df, test_rule, target_column)
+            test_metrics = calculate_directional_score(df, test_rule, target_var, direction)
 
             if test_metrics is None:
                 continue
@@ -153,14 +248,28 @@ def prune_rule(df, rule, target_column='species', min_improvement=0.05, min_feat
 
     return current_rule, base_metrics, pruning_history
 
+def find_best_rules(df, num_rules=5, target_var=None, direction=None):
+    """
+    Generate, prune and rank rules optimized for driving target_var in specified direction.
 
-def find_best_rules(df, num_rules=5, target_column='species'):
-    """Generate, prune and rank rules"""
-    rules = generate_rules(df, num_rules, target_column)
+    Args:
+        df: DataFrame with data
+        num_rules: Number of rules to return
+        target_var: Variable to optimize
+        direction: 'maximize'/'minimize' for continuous, or category name for categorical
+    """
+    if target_var is None:
+        raise ValueError("Must specify target_var")
+    if direction is None:
+        raise ValueError("Must specify direction (maximize/minimize or category)")
+
+    # Remove target variable from rule generation
+    features_to_use = [col for col in df.columns if col != target_var]
+    rules = generate_rules(df[features_to_use], num_rules, target_var)
+
     pruned_rules = []
-
     for rule in rules:
-        pruned_rule, metrics, history = prune_rule(df, rule, target_column)
+        pruned_rule, metrics, history = prune_rule(df, rule, target_var, direction)
         pruned_rules.append((pruned_rule, metrics, history))
 
     # Sort by score
