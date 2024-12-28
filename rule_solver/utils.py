@@ -110,6 +110,9 @@ def visualize_rule_impact(df, rule, target_var, direction):
 
     return '\n'.join(lines)
 
+# utils.py (update the format_rule_for_human function)
+
+# utils.py
 def format_rule_for_human(rule, metrics, history):
     """Format a rule and its metrics into a readable string."""
     lines = []
@@ -117,9 +120,16 @@ def format_rule_for_human(rule, metrics, history):
 
     # Format conditions
     lines.append("Rule Conditions:")
-    for feature, value in rule.items():
+    rule_dict = rule if isinstance(rule, dict) else dict(rule)
+    for feature, value in rule_dict.items():
         if isinstance(value, tuple):
-            lines.append(f"  {feature}: {value[0]:.1f} to {value[1]:.1f}")
+            try:
+                # Convert numpy values to float for cleaner printing
+                min_val = round(float(value[0]), 3)
+                max_val = round(float(value[1]), 3)
+                lines.append(f"  {feature}: {min_val} to {max_val}")
+            except:
+                lines.append(f"  {feature}: {value[0]} to {value[1]}")
         else:
             lines.append(f"  {feature}: {value}")
 
@@ -140,12 +150,23 @@ def format_rule_for_human(rule, metrics, history):
             lines.append(f"  Matching Rate: {stats['matching_rate']:.3f}")
             lines.append(f"  Non-matching Rate: {stats['non_matching_rate']:.3f}")
 
-    # Format pruning history
+    # Format history - handle both pruning and optimization steps
     if history:
-        lines.append("\nPruning Steps:")
+        lines.append("\nRule Evolution:")
         for step in history:
-            lines.append(f"  Removed: {step['removed_feature']} "
-                        f"(improvement: {step['improvement']:.3f})")
+            if 'removed_feature' in step:
+                lines.append(f"  Pruned: {step['removed_feature']} "
+                          f"(improvement: {step['improvement']:.3f})")
+            elif 'step' in step and step['step'] == 'optimization':
+                if 'change' in step:
+                    lines.append(f"  Optimization: {step['change']} on {step['feature']} "
+                              f"improved score from {step['initial_score']:.3f} "
+                              f"to {step['final_score']:.3f} "
+                              f"(gain: {step['improvement']:.3f})")
+                else:
+                    lines.append(f"  Optimization: score improved from {step['initial_score']:.3f} "
+                              f"to {step['final_score']:.3f} "
+                              f"(gain: {step['improvement']:.3f})")
 
     return '\n'.join(lines) + '\n'
 

@@ -1,0 +1,217 @@
+Generated Rules Report
+Target: petal_width (minimize)
+Date: 2024-12-27 17:27:07
+
+Rule 1
+==================================================
+Rule Conditions:
+  sepal_length: 3.65 to 5.75
+  petal_length: -0.6 to 3.8
+  species: setosa
+
+Performance:
+  Score: 0.513
+  Direction Score: 0.875
+  Coverage: 0.327 (49 samples)
+
+Target Variable Statistics:
+  Matching Median: 0.200
+  Non-matching Median: 1.600
+
+Rule Evolution:
+  Pruned: sepal_width (improvement: 0.051)
+
+Distribution Analysis:
+Rule Impact Analysis
+==================================================
+
+Matching Samples: 49 (32.7% of data)
+
+petal_width Distribution:
+Matching samples median: 0.20
+
+Matching samples:
+  0.10 | █████                          |   5
+  0.15 |                                |   0
+  0.20 | ██████████████████████████████ |  28
+  0.25 | ███████                        |   7
+  0.30 |                                |   0
+  0.35 |                                |   0
+  0.40 | ███████                        |   7
+  0.45 |                                |   0
+  0.50 | █                              |   1
+  0.55 | █                              |   1
+
+Non-matching samples median: 1.60
+Non-matching samples:
+  0.20 | █                              |   1
+  0.43 |                                |   0
+  0.66 |                                |   0
+  0.89 | ███████████████                |  10
+  1.12 | ███████████████████████████    |  18
+  1.35 | ██████████████████████████████ |  20
+  1.58 | ███████████████████████████    |  18
+  1.81 | ████████████████               |  11
+  2.04 | █████████████                  |   9
+  2.27 | █████████████████████          |  14
+
+Improvement: +87.5%
+
+Feature Distributions (Matching Samples):
+
+sepal_length:
+  4.30 | ███████                        |   4
+  4.44 | █                              |   1
+  4.58 | ███████████                    |   6
+  4.72 | █████████                      |   5
+  4.86 | ███████                        |   4
+  5.00 | ██████████████████████████████ |  16
+  5.14 | █████                          |   3
+  5.28 | ███████████                    |   6
+  5.42 | ███                            |   2
+  5.56 | ███                            |   2
+Rule range: [3.65, 5.75]
+
+petal_length:
+  1.00 | ██                             |   1
+  1.09 | ██                             |   1
+  1.18 | ██                             |   1
+  1.27 | ████████████████               |   7
+  1.36 | ██████████████████████████████ |  13
+  1.45 | ██████████████████████████████ |  13
+  1.54 | ████████████████               |   7
+  1.63 | █████████                      |   4
+  1.72 |                                |   0
+  1.81 | ████                           |   2
+Rule range: [-0.60, 3.80]
+
+Rule 2
+==================================================
+Rule Conditions:
+  petal_length: 1.4 to 5.8
+
+Performance:
+  Score: 0.177
+  Direction Score: 0.278
+  Coverage: 0.840 (126 samples)
+
+Target Variable Statistics:
+  Matching Median: 1.300
+  Non-matching Median: 1.800
+
+Distribution Analysis:
+Rule Impact Analysis
+==================================================
+
+Matching Samples: 126 (84.0% of data)
+
+petal_width Distribution:
+Matching samples median: 1.30
+
+Matching samples:
+  0.10 | ████████████████████████████   |  31
+  0.34 | ██████                         |   7
+  0.58 |                                |   1
+  0.82 | ██████                         |   7
+  1.06 | ███████                        |   8
+  1.30 | ██████████████████████████████ |  33
+  1.54 | █████                          |   6
+  1.78 | ████████████████               |  18
+  2.02 | █████                          |   6
+  2.26 | ████████                       |   9
+
+Non-matching samples median: 1.80
+Non-matching samples:
+  0.10 | ██████████████████████████████ |  10
+  0.34 | ███                            |   1
+  0.58 |                                |   0
+  0.82 |                                |   0
+  1.06 |                                |   0
+  1.30 |                                |   0
+  1.54 |                                |   0
+  1.78 | ███████████████                |   5
+  2.02 | █████████                      |   3
+  2.26 | ███████████████                |   5
+
+Improvement: +27.8%
+
+Feature Distributions (Matching Samples):
+
+petal_length:
+  1.40 | ██████████████████████████████ |  37
+  1.84 | █                              |   2
+  2.28 |                                |   0
+  2.72 |                                |   1
+  3.16 | ███                            |   4
+  3.60 | ████████                       |  11
+  4.04 | ██████████                     |  13
+  4.48 | ████████████████████           |  25
+  4.92 | ████████████                   |  16
+  5.36 | █████████████                  |  17
+Rule range: [1.40, 5.80]
+
+Rule 3
+==================================================
+Rule Conditions:
+  petal_length: 1.4 to 5.8
+
+Performance:
+  Score: 0.177
+  Direction Score: 0.278
+  Coverage: 0.840 (126 samples)
+
+Target Variable Statistics:
+  Matching Median: 1.300
+  Non-matching Median: 1.800
+
+Distribution Analysis:
+Rule Impact Analysis
+==================================================
+
+Matching Samples: 126 (84.0% of data)
+
+petal_width Distribution:
+Matching samples median: 1.30
+
+Matching samples:
+  0.10 | ████████████████████████████   |  31
+  0.34 | ██████                         |   7
+  0.58 |                                |   1
+  0.82 | ██████                         |   7
+  1.06 | ███████                        |   8
+  1.30 | ██████████████████████████████ |  33
+  1.54 | █████                          |   6
+  1.78 | ████████████████               |  18
+  2.02 | █████                          |   6
+  2.26 | ████████                       |   9
+
+Non-matching samples median: 1.80
+Non-matching samples:
+  0.10 | ██████████████████████████████ |  10
+  0.34 | ███                            |   1
+  0.58 |                                |   0
+  0.82 |                                |   0
+  1.06 |                                |   0
+  1.30 |                                |   0
+  1.54 |                                |   0
+  1.78 | ███████████████                |   5
+  2.02 | █████████                      |   3
+  2.26 | ███████████████                |   5
+
+Improvement: +27.8%
+
+Feature Distributions (Matching Samples):
+
+petal_length:
+  1.40 | ██████████████████████████████ |  37
+  1.84 | █                              |   2
+  2.28 |                                |   0
+  2.72 |                                |   1
+  3.16 | ███                            |   4
+  3.60 | ████████                       |  11
+  4.04 | ██████████                     |  13
+  4.48 | ████████████████████           |  25
+  4.92 | ████████████                   |  16
+  5.36 | █████████████                  |  17
+Rule range: [1.40, 5.80]
+

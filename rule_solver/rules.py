@@ -1,7 +1,10 @@
 # rules.py
 import numpy as np
+import pandas as pd
 from typing import Dict, Union, List, Tuple
 from .utils import infer_feature_types
+from .optimization import RuleOptimizer
+
 
 def fast_ranks(x):
     """Simple ranking function using numpy only"""
@@ -248,15 +251,16 @@ def prune_rule(df, rule, target_var, direction, min_improvement=0.05, min_featur
 
     return current_rule, base_metrics, pruning_history
 
-def find_best_rules(df, num_rules=5, target_var=None, direction=None):
+def find_best_rules(df, num_rules=5, target_var=None, direction=None, search_multiplier=4):
     """
-    Generate, prune and rank rules optimized for driving target_var in specified direction.
+    Generate, prune, optimize and rank rules for driving target_var in specified direction.
 
     Args:
         df: DataFrame with data
         num_rules: Number of rules to return
         target_var: Variable to optimize
-        direction: 'maximize'/'minimize' for continuous, or category name for categorical
+        direction: 'maximize'/'minimize' for continuous, or category for categorical
+        search_multiplier: Multiple of num_rules to search initially
     """
     if target_var is None:
         raise ValueError("Must specify target_var")
@@ -265,13 +269,64 @@ def find_best_rules(df, num_rules=5, target_var=None, direction=None):
 
     # Remove target variable from rule generation
     features_to_use = [col for col in df.columns if col != target_var]
-    rules = generate_rules(df[features_to_use], num_rules, target_var)
 
+    # Generate more initial rules for better coverage
+    initial_rules = generate_rules(
+        df[features_to_use],
+        num_rules * search_multiplier,
+        target_var
+    )
+
+    # Prune rules
     pruned_rules = []
-    for rule in rules:
+    for rule in initial_rules:
         pruned_rule, metrics, history = prune_rule(df, rule, target_var, direction)
         pruned_rules.append((pruned_rule, metrics, history))
 
-    # Sort by score
-    pruned_rules.sort(key=lambda x: x[1]['score'], reverse=True)
-    return pruned_rules[:num_rules]  # Return only requested number of rules
+    # Create optimizer and optimize rules
+    optimizer = RuleOptimizer(df, target_var, direction)
+    optimized_rules = []
+
+    for rule, metrics, history in pruned_rules:
+        # Optimization returns (rule, history)
+        optimized_rule, opt_history = optimizer.optimize_rule(rule)
+
+        # Calculate new metrics for optimized rule
+        if isinstance(optimized_rule, tuple):  # If optimized_rule is a tuple, extract the rule part
+            optimized_rule = optimized_rule[0]
+
+        new_metrics = calculate_directional_score(df, optimized_rule, target_var, direction)
+
+        # Combine histories
+        combined_history = history + opt_history
+
+        optimized_rules.append((optimized_rule, new_metrics, combined_history))
+
+    # Sort by score and slice
+    optimized_rules.sort(key=lambda x: x[1]['score'], reverse=True)
+
+    return optimized_rules[:num_rules]
+
+
+# rules.py
+
+def matches_rule(row, rule, target_var=None):
+    """Check if a row matches rule conditions."""
+    for feature, value in rule.items():
+        if feature == target_var:
+            continue
+
+        # Only try numeric comparison for tuple conditions
+        if isinstance(value, tuple):
+            try:
+                min_val, max_val = value
+                if not (pd.to_numeric(min_val) <= pd.to_numeric(row[feature]) <= pd.to_numeric(max_val)):
+                    return False
+            except (TypeError, ValueError):
+                # If conversion fails, do direct comparison
+                if row[feature] != value:
+                    return False
+        else:
+            if row[feature] != value:
+                return False
+    return True
